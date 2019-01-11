@@ -24,8 +24,8 @@ requirements = ['flask>=0.10', 'sqlalchemy>=0.8', 'python-dateutil>2.0',
 
 
 setup(
-    author='Jeffrey Finkelstein',
-    author_email='jeffrey.finkelstein@gmail.com',
+    author='ZX Lidars',
+    author_email='software@zxlidars.com',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Web Environment',
@@ -45,18 +45,18 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules'
     ],
     description='A Flask extension for easy ReSTful API generation',
-    download_url='http://pypi.python.org/pypi/Flask-Restless',
+    download_url='http://pypi.python.org/pypi/Flask-Restless-Zx',
     install_requires=requirements,
     include_package_data=True,
     keywords=['ReST', 'API', 'Flask'],
     license='GNU AGPLv3+ or BSD',
     long_description=__doc__,
-    name='Flask-Restless',
+    name='Flask-Restless-Zx',
     platforms='any',
     packages=['flask_restless'],
     test_suite='nose.collector',
     tests_require=['nose'],
-    url='http://github.com/jfinkels/flask-restless',
-    version='0.17.0',
+    url='http://github.com/zxlidars/flask-restless-zx',
+    version='0.20.0-dev',
     zip_safe=False
 )
