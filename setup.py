@@ -57,6 +57,6 @@ setup(
     test_suite='nose.collector',
     tests_require=['nose'],
     url='http://github.com/zxlidars/flask-restless-zx',
-    version='0.20.0-dev',
+    version='0.20.0',
     zip_safe=False
 )

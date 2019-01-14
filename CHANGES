@@ -3,7 +3,7 @@ Changelog
 
 Here you can see the full list of changes between each Flask-Restless release.
 Numbers following a pound sign (#) refer to `GitHub issues
-<https://github.com/jfinkels/flask-restless/issues>`_.
+<https://github.com/zxlidars/flask-restless-zx/issues>`_.
 
 .. note::
 
@@ -15,11 +15,12 @@ Numbers following a pound sign (#) refer to `GitHub issues
    As of version 0.6, Flask-Restless supports both pure SQLAlchemy and
    Flask-SQLAlchemy models. Before that, it supported only Elixir models.
 
-Version 0.20.0-dev
+Version 0.20.0
 --------------
-Not yet released
 
+Released on January 14, 2019.
 
+- #3: Documentation updated for Flask-Restless-Zx fork. Error logging and error objects updated.
 
 
 Version 0.17.0
