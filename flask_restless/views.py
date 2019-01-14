@@ -69,7 +69,6 @@ from .helpers import get_related_association_proxy_model
 from .search import create_query
 from .search import search
 
-
 #: Format string for creating Link headers in paginated responses.
 LINKTEMPLATE = '<{0}?page={1}&results_per_page={2}>; rel="{3}"'
 
@@ -97,6 +96,7 @@ class ProcessingException(HTTPException):
     JSON object in the body of the response to the client.
 
     """
+
     def __init__(self, description='', code=400, *args, **kwargs):
         super(ProcessingException, self).__init__(*args, **kwargs)
         self.code = code
@@ -156,10 +156,11 @@ def catch_processing_exceptions(func):
         try:
             return func(*args, **kw)
         except ProcessingException as exception:
-            current_app.logger.exception(str(exception))
+            current_app.logger.warning(str(exception))
             status = exception.code
             message = exception.description or str(exception)
             return jsonify(message=message), status
+
     return decorator
 
 
@@ -182,6 +183,7 @@ def catch_integrity_errors(session):
     an error response is returned to the client.
 
     """
+
     def decorator(func):
         @wraps(func)
         def wrapped(*args, **kw):
@@ -190,9 +192,12 @@ def catch_integrity_errors(session):
             # TODO should `sqlalchemy.exc.InvalidRequestError`s also be caught?
             except (DataError, IntegrityError, ProgrammingError) as exception:
                 session.rollback()
-                current_app.logger.exception(str(exception))
-                return dict(message=type(exception).__name__), 400
+                current_app.logger.warning(str(exception))
+                status = 400
+                return dict(message=type(exception).__name__, status=status), status
+
         return wrapped
+
     return decorator
 
 
@@ -410,13 +415,14 @@ def extract_error_messages(exception):
             left_bracket = left.rindex('[')
             right_bracket = right.rindex(']')
         except ValueError as exc:
-            current_app.logger.exception(str(exc))
+            current_app.logger.warning(str(exc))
             # could not parse the string; we're not trying too hard here...
             return None
         msg = right[:right_bracket].strip(' "')
         fieldname = left[left_bracket + 1:].strip()
         return {fieldname: msg}
     return None
+
 
 #: Creates the mimerender object necessary for decorating responses with a
 #: function that automatically formats the dictionary in the appropriate format
@@ -490,14 +496,20 @@ class FunctionAPI(ModelView):
         :ref:`functionevaluation`.
 
         """
+        query = None
         if 'q' not in request.args or not request.args.get('q'):
-            return dict(message='Empty query parameter'), 400
+            status = 400
+            return dict(message='Empty query parameter', status=status), status
         # if parsing JSON fails, return a 400 error in JSON format
         try:
-            data = json.loads(str(request.args.get('q'))) or {}
+            query = str(request.args.get('q'))
+            data = json.loads(query) or {}
         except (TypeError, ValueError, OverflowError) as exception:
-            current_app.logger.exception(str(exception))
-            return dict(message='Unable to decode data'), 400
+            return self._handle_request_exception(
+                error_message='Unable to decode data',
+                exception=exception,
+                status=400,
+                query=query)
         try:
             result = evaluate_functions(self.session, self.model,
                                         data.get('functions', []))
@@ -505,13 +517,17 @@ class FunctionAPI(ModelView):
                 return {}, 204
             return result
         except AttributeError as exception:
-            current_app.logger.exception(str(exception))
-            message = 'No such field "{0}"'.format(exception.field)
-            return dict(message=message), 400
+            return self._handle_request_exception(
+                error_message='No such field "{0}"'.format(exception.field),
+                exception=exception,
+                status=400,
+                query=query)
         except OperationalError as exception:
-            current_app.logger.exception(str(exception))
-            message = 'No such function "{0}"'.format(exception.function)
-            return dict(message=message), 400
+            return self._handle_request_exception(
+                error_message='No such function "{0}"'.format(exception.function),
+                exception=exception,
+                status=400,
+                query=query)
 
 
 class API(ModelView):
@@ -777,7 +793,7 @@ class API(ModelView):
                 for instance in query:
                     getattr(instance, relationname).append(subinst)
             except AttributeError as exception:
-                current_app.logger.exception(str(exception))
+                current_app.logger.warning(str(exception))
                 setattr(instance, relationname, subinst)
 
     def _remove_from_relation(self, query, relationname, toremove=None):
@@ -891,7 +907,7 @@ class API(ModelView):
         for columnname in tochange:
             # Check if 'add' or 'remove' is being used
             if (isinstance(params[columnname], dict)
-                and any(k in params[columnname] for k in ['add', 'remove'])):
+                    and any(k in params[columnname] for k in ['add', 'remove'])):
 
                 toadd = params[columnname].get('add', [])
                 toremove = params[columnname].get('remove', [])
@@ -904,6 +920,27 @@ class API(ModelView):
 
         return tochange
 
+    def _handle_request_exception(self, exception, error_message, status, query = None) -> (dict, int):
+        """ Creates a tuple to return in the event of an error.
+        :param exception:
+        :param error_message:
+        :param status:
+        :return: a tuple of the json to return and its status code.
+        """
+        error_detail = str(exception)
+        result = {
+            'status': status,
+            'message': error_message,
+            'detail': error_detail
+        }
+        if query is not None:
+            result['query'] = query
+
+        current_app.logger.warning(str(result))
+
+        return result, status
+
+
     def _handle_validation_exception(self, exception):
         """Rolls back the session, extracts validation error messages, and
         returns a :func:`flask.jsonify` response with :http:statuscode:`400`
@@ -915,8 +952,9 @@ class API(ModelView):
         """
         self.session.rollback()
         errors = extract_error_messages(exception) or \
-            'Could not determine specific validation errors'
-        return dict(validation_errors=errors), 400
+                 'Could not determine specific validation errors'
+        status = 400
+        return dict(message=errors, status=status), status
 
     def _compute_results_per_page(self):
         """Helper function which returns the number of results per page based
@@ -1134,11 +1172,15 @@ class API(ModelView):
 
         """
         # try to get search query from the request query parameters
+        query = request.args.get('q', '{}')
         try:
-            search_params = json.loads(request.args.get('q', '{}'))
+            search_params = json.loads(query)
         except (TypeError, ValueError, OverflowError) as exception:
-            current_app.logger.exception(str(exception))
-            return dict(message='Unable to decode data'), 400
+            return self._handle_request_exception(
+                error_message='Unable to decode data',
+                exception=exception,
+                status=400,
+                query=query)
 
         for preprocessor in self.preprocessors['GET_MANY']:
             preprocessor(search_params=search_params)
@@ -1163,20 +1205,34 @@ class API(ModelView):
                 try:
                     result = strings_to_dates(query_model, to_convert)
                 except ValueError as exception:
-                    current_app.logger.exception(str(exception))
-                    return dict(message='Unable to construct query'), 400
+                    return self._handle_request_exception(
+                        error_message='Unable to construct query',
+                        exception=exception,
+                        status=400,
+                        query=query)
                 param['val'] = result.get(query_field)
 
         # perform a filtered search
         try:
             result = search(self.session, self.model, search_params)
-        except NoResultFound:
-            return dict(message='No result found'), 404
-        except MultipleResultsFound:
-            return dict(message='Multiple results found'), 400
+        except NoResultFound as exception:
+            return self._handle_request_exception(
+                error_message='No result found',
+                exception=exception,
+                status=404,
+                query=query)
+        except MultipleResultsFound as exception:
+            return self._handle_request_exception(
+                error_message='Multiple results found',
+                exception=exception,
+                status=400,
+                query=query)
         except Exception as exception:
-            current_app.logger.exception(str(exception))
-            return dict(message='Unable to construct query'), 400
+            return self._handle_request_exception(
+                error_message='Unable to construct query',
+                exception=exception,
+                status=400,
+                query=query)
 
         # create a placeholder for the relations of the returned models
         relations = frozenset(get_relations(self.model))
@@ -1292,11 +1348,15 @@ class API(ModelView):
 
         """
         # try to get search query from the request query parameters
+        query = request.args.get('q', '{}')
         try:
-            search_params = json.loads(request.args.get('q', '{}'))
+            search_params = json.loads(query)
         except (TypeError, ValueError, OverflowError) as exception:
-            current_app.logger.exception(str(exception))
-            return dict(message='Unable to decode search query'), 400
+            return self._handle_request_exception(
+                error_message='Unable to decode search query',
+                exception=exception,
+                status=400,
+                query=query)
 
         for preprocessor in self.preprocessors['DELETE_MANY']:
             preprocessor(search_params=search_params)
@@ -1313,13 +1373,24 @@ class API(ModelView):
             #
             result = search(self.session, self.model, search_params,
                             _ignore_order_by=True)
-        except NoResultFound:
-            return dict(message='No result found'), 404
-        except MultipleResultsFound:
-            return dict(message='Multiple results found'), 400
+        except NoResultFound as exception:
+            return self._handle_request_exception(
+                error_message='No result found',
+                exception=exception,
+                status=404,
+                query=query)
+        except MultipleResultsFound as exception:
+            return self._handle_request_exception(
+                error_message='Multiple results found',
+                exception=exception,
+                status=400,
+                query=query)
         except Exception as exception:
-            current_app.logger.exception(str(exception))
-            return dict(message='Unable to construct query'), 400
+            return self._handle_request_exception(
+                error_message='Unable to construct query',
+                exception=exception,
+                status=400,
+                query=query)
 
         # for security purposes, don't transmit list as top-level JSON
         if isinstance(result, Query):
@@ -1423,7 +1494,8 @@ class API(ModelView):
         # issue #267).
         if not is_msie and not content_is_json:
             msg = 'Request must have "Content-Type: application/json" header'
-            return dict(message=msg), 415
+            status = 415
+            return dict(message=msg, status=status), status
 
         # try to read the parameters for the model from the body of the request
         try:
@@ -1434,8 +1506,10 @@ class API(ModelView):
             else:
                 data = request.get_json() or {}
         except (BadRequest, TypeError, ValueError, OverflowError) as exception:
-            current_app.logger.exception(str(exception))
-            return dict(message='Unable to decode data'), 400
+            return self._handle_request_exception(
+                error_message='Unable to decode data',
+                exception=exception,
+                status=400)
 
         # apply any preprocessors to the POST arguments
         for preprocessor in self.preprocessors['POST']:
@@ -1504,7 +1578,8 @@ class API(ModelView):
         # issue #267).
         if not is_msie and not content_is_json:
             msg = 'Request must have "Content-Type: application/json" header'
-            return dict(message=msg), 415
+            status = 415
+            return dict(message=msg, status=status), status
 
         # try to load the fields/values to update from the body of the request
         try:
@@ -1516,8 +1591,10 @@ class API(ModelView):
                 data = request.get_json() or {}
         except (BadRequest, TypeError, ValueError, OverflowError) as exception:
             # this also happens when request.data is empty
-            current_app.logger.exception(str(exception))
-            return dict(message='Unable to decode data'), 400
+            return self._handle_request_exception(
+                error_message='Unable to decode data',
+                exception=exception,
+                status=400)
 
         # Check if the request is to patch many instances of the current model.
         patchmany = instid is None
@@ -1540,15 +1617,18 @@ class API(ModelView):
         for field in data:
             if not has_field(self.model, field):
                 msg = "Model does not have field '{0}'".format(field)
-                return dict(message=msg), 400
+                status = 400
+                return dict(message=msg, status=status), status
 
         if patchmany:
             try:
                 # create a SQLALchemy Query from the query parameter `q`
                 query = create_query(self.session, self.model, search_params)
             except Exception as exception:
-                current_app.logger.exception(str(exception))
-                return dict(message='Unable to construct query'), 400
+                return self._handle_request_exception(
+                    error_message='Unable to construct query',
+                    exception=exception,
+                    status=400)
         else:
             # create a SQLAlchemy Query which has exactly the specified row
             query = query_by_primary_key(self.session, self.model, instid,
@@ -1560,7 +1640,7 @@ class API(ModelView):
         try:
             relations = self._update_relations(query, data)
         except self.validation_exceptions as exception:
-            current_app.logger.exception(str(exception))
+            current_app.logger.warning(str(exception))
             return self._handle_validation_exception(exception)
         field_list = frozenset(data) ^ relations
         data = dict((field, data[field]) for field in field_list)
@@ -1579,7 +1659,7 @@ class API(ModelView):
                     num_modified += 1
             self.session.commit()
         except self.validation_exceptions as exception:
-            current_app.logger.exception(str(exception))
+            current_app.logger.warning(str(exception))
             return self._handle_validation_exception(exception)
 
         # Perform any necessary postprocessing.

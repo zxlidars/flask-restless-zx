@@ -1,26 +1,33 @@
-# Flask-Restless #
+# Flask-Restless-Zx #
 
 ## Introduction ##
 
-This is Flask-Restless, a [Flask][1] extension which facilitates the creation
+This is Flask-Restless-Zx, a fork of [Flask-Restless][frestless] which facilitates the creation
 of ReSTful JSON APIs. It is compatible with models which have been defined
-using either [SQLAlchemy][sa] or [Flask-SQLAlchemy][fsa].
+using either [SQLAlchemy][sa] or [Flask-SQLAlchemy][fsa]
+
+It was forked to improve certain aspects of Flask-Restless, such as the error logging and error object returns.
 
 This document contains some brief instructions concerning installation of
 requirements, installation of this extension, configuration and usage of this
 extension, and building of documentation.
 
-For more information, check the World Wide Web!
+For more information, check the original flask-restless documentation. Modifications in Flask-Restless-ZX are detailed further below.
 
   * [Documentation](http://readthedocs.org/docs/flask-restless)
-  * [Python Package Index listing](http://pypi.python.org/pypi/Flask-Restless)
-  * [Source code repository](http://github.com/jfinkels/flask-restless)
-
-[![Build status](https://secure.travis-ci.org/jfinkels/flask-restless.png)](http://travis-ci.org/jfinkels/flask-restless)
+  * [Python Package Index listing](http://pypi.python.org/pypi/Flask-Restless-Zx)
+  * [Source code repository](http://github.com/zxlidars/flask-restless-zx)
 
 [1]: http://flask.pocoo.org
 [sa]: http://sqlalchemy.org
 [fsa]: http://packages.python.org/Flask-SQLAlchemy
+[frestless]: http://github.com/jfinkels/flask-restless
+
+## Changes in Flask-Restless-Zx ##
+
+* Error log messages have been improved, and now use `logger.warning` instead of `logger.exception`. 
+* `status` is now included in every error object, containing the status code of the error.
+* Search filter error responses now have a `detail` key which provides more information regarding the error.
 
 ## Copyright license ##
 
@@ -85,6 +92,10 @@ is probably the easiest way to install these:
 or
 
     pip install Flask Flask-SQLAlchemy python-dateutil sqlalchemy
+
+Alternatively, `pipenv` can be used to set up a virtual environment using the provided PIPFILE.
+
+    pipenv --update 
 
 [4]: http://www.python.org/
 [5]: http://labix.org/python-dateutil
@@ -209,7 +220,7 @@ contributions under both the GNU Affero General Public License, either version
 3 or any later version, and the 3-clause BSD License, as described in the
 copyright license section above.
 
-[11]: http://github.com/jfinkels/flask-restless/issues
+[11]: http://github.com/zxlidars/flask-restless-zx/issues
 [12]: https://www.python.org/dev/peps/pep-0008/
 [13]: http://flake8.readthedocs.org/en/latest/
 [14]: https://help.github.com/articles/about-git-rebase/
@@ -232,7 +243,3 @@ licensed under the [Flask Artwork License][10].
 
 [9]: http://creativecommons.org/licenses/by-sa/3.0
 [10]: http://flask.pocoo.org/docs/license/#flask-artwork-license
-
-## Contact ##
-
-Jeffrey Finkelstein <jeffrey.finkelstein@gmail.com>
